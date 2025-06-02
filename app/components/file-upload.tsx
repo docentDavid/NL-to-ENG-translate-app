@@ -9,9 +9,16 @@ import { Upload, File, X } from "lucide-react"
 interface FileUploadProps {
   onTranscriptionComplete: (data: any) => void
   setIsProcessing: (processing: boolean) => void
+  inputLanguage: string
+  outputLanguage: string
 }
 
-export default function FileUpload({ onTranscriptionComplete, setIsProcessing }: FileUploadProps) {
+export default function FileUpload({
+  onTranscriptionComplete,
+  setIsProcessing,
+  inputLanguage,
+  outputLanguage,
+}: FileUploadProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
 
@@ -41,6 +48,8 @@ export default function FileUpload({ onTranscriptionComplete, setIsProcessing }:
     setIsProcessing(true)
     const formData = new FormData()
     formData.append("audio", selectedFile)
+    formData.append("inputLanguage", inputLanguage)
+    formData.append("outputLanguage", outputLanguage)
 
     try {
       const response = await fetch("/api/transcribe", {
@@ -99,7 +108,7 @@ export default function FileUpload({ onTranscriptionComplete, setIsProcessing }:
               <X className="w-4 h-4" />
             </Button>
             <Button onClick={processFile} size="sm">
-              Transcribeer
+              Transcribeer & Vertaal
             </Button>
           </div>
         </div>

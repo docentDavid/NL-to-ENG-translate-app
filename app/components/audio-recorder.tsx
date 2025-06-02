@@ -7,9 +7,16 @@ import { Mic, Square, Play, Pause } from "lucide-react"
 interface AudioRecorderProps {
   onTranscriptionComplete: (data: any) => void
   setIsProcessing: (processing: boolean) => void
+  inputLanguage: string
+  outputLanguage: string
 }
 
-export default function AudioRecorder({ onTranscriptionComplete, setIsProcessing }: AudioRecorderProps) {
+export default function AudioRecorder({
+  onTranscriptionComplete,
+  setIsProcessing,
+  inputLanguage,
+  outputLanguage,
+}: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -74,6 +81,8 @@ export default function AudioRecorder({ onTranscriptionComplete, setIsProcessing
     setIsProcessing(true)
     const formData = new FormData()
     formData.append("audio", audioBlob, "recording.wav")
+    formData.append("inputLanguage", inputLanguage)
+    formData.append("outputLanguage", outputLanguage)
 
     try {
       const response = await fetch("/api/transcribe", {
@@ -134,7 +143,7 @@ export default function AudioRecorder({ onTranscriptionComplete, setIsProcessing
                 {isPlaying ? "Pauzeer" : "Afspelen"}
               </Button>
               <Button onClick={processAudio} size="sm" className="gap-2">
-                Transcribeer
+                Transcribeer & Vertaal
               </Button>
             </div>
           </div>

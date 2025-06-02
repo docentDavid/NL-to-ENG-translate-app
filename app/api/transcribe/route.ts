@@ -1,10 +1,43 @@
 import { groq } from "@ai-sdk/groq"
 import { generateText } from "ai"
 
+// Language code mapping for Whisper
+const WHISPER_LANGUAGE_MAP: { [key: string]: string } = {
+  nl: "nl",
+  en: "en",
+  "en-US": "en",
+  de: "de",
+  fr: "fr",
+  es: "es",
+  it: "it",
+  pt: "pt",
+  ru: "ru",
+  ja: "ja",
+  ko: "ko",
+  zh: "zh",
+}
+
+const LANGUAGE_NAMES: { [key: string]: string } = {
+  nl: "Dutch",
+  en: "English (UK)",
+  "en-US": "English (US)",
+  de: "German",
+  fr: "French",
+  es: "Spanish",
+  it: "Italian",
+  pt: "Portuguese",
+  ru: "Russian",
+  ja: "Japanese",
+  ko: "Korean",
+  zh: "Chinese",
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData()
     const audioFile = formData.get("audio") as File
+    const inputLanguage = (formData.get("inputLanguage") as string) || "nl"
+    const outputLanguage = (formData.get("outputLanguage") as string) || "en"
 
     if (!audioFile) {
       return Response.json({ error: "No audio file provided" }, { status: 400 })
@@ -14,7 +47,10 @@ export async function POST(request: Request) {
     const audioBuffer = await audioFile.arrayBuffer()
     const audioBlob = new Blob([audioBuffer], { type: audioFile.type })
 
-    // Transcribe Dutch audio using Groq Whisper
+    // Get the correct language code for Whisper
+    const whisperLangCode = WHISPER_LANGUAGE_MAP[inputLanguage] || "auto"
+
+    // Transcribe audio using Groq Whisper
     const transcriptionResponse = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
       headers: {
@@ -24,7 +60,9 @@ export async function POST(request: Request) {
         const formData = new FormData()
         formData.append("file", audioBlob, "audio.wav")
         formData.append("model", "whisper-large-v3")
-        formData.append("language", "nl")
+        if (whisperLangCode !== "auto") {
+          formData.append("language", whisperLangCode)
+        }
         return formData
       })(),
     })
@@ -34,65 +72,34 @@ export async function POST(request: Request) {
     }
 
     const transcriptionData = await transcriptionResponse.json()
-    const dutchText = transcriptionData.text
+    const originalText = transcriptionData.text
 
-    // Translate to English and generate educational feedback
-    const { text: analysisResult } = await generateText({
-      model: groq("llama-3.1-8b-instant"),
-      prompt: `You are an educational AI assistant. You receive Dutch text that you must:
-
-1. Translate to correct English
-2. Analyze from an educational perspective  
-3. Provide feedback on the content
-4. Make feed forward suggestions for improvement
-
-Dutch text: "${dutchText}"
-
-IMPORTANT: Respond ONLY with valid JSON in exactly this format, no additional text or explanation:
-
-{
-  "dutch": "${dutchText}",
-  "english": "English translation here",
-  "feedback": "Educational feedback about content, learning outcomes, and strengths",
-  "feedforward": "Concrete suggestions for improvement and further development"
-}`,
-    })
-
-    // Parse the JSON response with better error handling
-    let parsedResult
-    try {
-      // Clean the response to ensure it's valid JSON
-      const cleanedResult = analysisResult.trim()
-      console.log("AI Response:", cleanedResult) // Debug log
-
-      parsedResult = JSON.parse(cleanedResult)
-
-      // Validate that all required fields exist
-      if (!parsedResult.dutch || !parsedResult.english || !parsedResult.feedback || !parsedResult.feedforward) {
-        throw new Error("Missing required fields in response")
-      }
-    } catch (parseError) {
-      console.error("JSON Parse Error:", parseError)
-      console.error("Raw AI Response:", analysisResult)
-
-      // Enhanced fallback with actual translation attempt
-      const { text: simpleTranslation } = await generateText({
-        model: groq("llama-3.1-8b-instant"),
-        prompt: `Translate this Dutch text to English: "${dutchText}"
-    
-    Respond with only the English translation, no additional text.`,
+    // If input and output languages are the same, skip translation
+    if (inputLanguage === outputLanguage) {
+      return Response.json({
+        original: originalText,
+        translated: originalText,
+        inputLang: inputLanguage,
+        outputLang: outputLanguage,
       })
-
-      parsedResult = {
-        dutch: dutchText,
-        english: simpleTranslation.trim(),
-        feedback:
-          "De audio is succesvol getranscribeerd. Voor een volledige educatieve analyse, probeer opnieuw met duidelijkere audio.",
-        feedforward: "Zorg voor goede audio kwaliteit en spreek duidelijk voor betere analyse resultaten.",
-      }
     }
 
-    return Response.json(parsedResult)
+    // Translate the text
+    const { text: translatedText } = await generateText({
+      model: groq("llama-3.1-8b-instant"),
+      prompt: `Translate the following text from ${LANGUAGE_NAMES[inputLanguage] || inputLanguage} to ${LANGUAGE_NAMES[outputLanguage] || outputLanguage}.
+
+Text to translate: "${originalText}"
+
+Provide only the translation, no additional text or explanation.`,
+    })
+
+    return Response.json({
+      original: originalText,
+      translated: translatedText.trim(),
+      inputLang: inputLanguage,
+      outputLang: outputLanguage,
+    })
   } catch (error) {
     console.error("Transcription error:", error)
     return Response.json({ error: "Failed to process audio" }, { status: 500 })
